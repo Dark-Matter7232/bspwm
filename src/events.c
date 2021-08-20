@@ -216,6 +216,12 @@ void configure_request(xcb_generic_event_t *evt)
 
 		xcb_send_event(dpy, false, e->window, XCB_EVENT_MASK_STRUCTURE_NOTIFY, (const char *) &evt);
 	}
+    if (is_managed
+        && e->value_mask & XCB_CONFIG_WINDOW_STACK_MODE
+        && e->stack_mode == XCB_STACK_MODE_ABOVE
+        && !ignore_ewmh_focus) {
+        focus_node(loc.monitor, loc.desktop, loc.node);
+    }
 }
 
 void configure_notify(xcb_generic_event_t *evt)
