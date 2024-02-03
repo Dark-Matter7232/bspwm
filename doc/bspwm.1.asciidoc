@@ -15,6 +15,8 @@ Synopsis
 
 *bspwm* [*-h*|*-v*|*-c* 'CONFIG_PATH']
 
+*bspc --print-socket-path*
+
 *bspc* 'DOMAIN' ['SELECTOR'] 'COMMANDS'
 
 *bspc* 'COMMAND' ['OPTIONS'] ['ARGUMENTS']
@@ -38,6 +40,9 @@ Options
 
 *-c* 'CONFIG_PATH'::
 	Use the given configuration file.
+
+*--print-socket-path*::
+    Print the *bspwm* socket path and exit.
 
 Common Definitions
 ------------------
@@ -575,7 +580,7 @@ Options
 
 *-m*,*--monitor* ['MONITOR_SEL'|'MONITOR_MODIFIERS']::
 *-d*,*--desktop* ['DESKTOP_SEL'|'DESKTOP_MODIFIERS']::
-*-n*, *--node* ['NODE_SEL'|'NODE_MODIFIERS']::
+*-n*,*--node* ['NODE_SEL'|'NODE_MODIFIERS']::
 	Constrain matches to the selected monitors, desktops or nodes.
 
 *--names*::
@@ -627,8 +632,9 @@ rule 'COMMANDS'
 Commands
 ^^^^^^^^
 
-*-a*, *--add* (<class_name>|\*)[:(<instance_name>|\*)[:(<name>|\*)]] [*-o*|*--one-shot*] [monitor=MONITOR_SEL|desktop=DESKTOP_SEL|node=NODE_SEL] [state=STATE] [layer=LAYER] [split_dir=DIR] [split_ratio=RATIO] [(hidden|sticky|private|locked|marked|center|follow|manage|focus|border)=(on|off)] [rectangle=WxH+X+Y]::
-	Create a new rule.
+*-a*, *--add* (<class_name>|\*)[:(<instance_name>|\*)[:(<name>|\*)]] [*-o*|*--one-shot*] [monitor=MONITOR_SEL|desktop=DESKTOP_SEL|node=NODE_SEL] [state=STATE] [layer=LAYER] [honor_size_hints=(true|false|tiled|floating)] [split_dir=DIR] [split_ratio=RATIO] [(hidden|sticky|private|locked|marked|center|follow|manage|focus|border)=(on|off)] [rectangle=WxH+X+Y]::
+	Create a new rule. Colons in the 'instance_name', 'class_name', or 'name'
+	fields can be escaped with a backslash.
 
 *-r*, *--remove* ^<n>|head|tail|(<class_name>|\*)[:(<instance_name>|\*)[:(<name>|*)]]...::
 	Remove the given rules.
@@ -780,9 +786,6 @@ Global Settings
 'center_pseudo_tiled'::
 	Center pseudo tiled windows into their tiling rectangles. Defaults to 'true'.
 
-'honor_size_hints'::
-	Apply ICCCM window size hints.
-
 'remove_disabled_monitors'::
 	Consider disabled monitors as disconnected.
 
@@ -812,6 +815,9 @@ Node Settings
 
 'border_width'::
 	Window border width.
+
+'honor_size_hints'::
+	If 'true', apply ICCCM window size hints to all windows. If 'floating', only apply them to floating and pseudo tiled windows. If 'tiled', only apply them to tiled windows. If 'false', don't apply them. Defaults to 'false'.
 
 Pointer Bindings
 ----------------

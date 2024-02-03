@@ -472,13 +472,13 @@ void cmd_node(char **args, int num, FILE *rsp)
 			split_type_t typ;
 			if (parse_cycle_direction(*args, &cyc)) {
 				set_type(trg.node, (trg.node->split_type + 1) % 2);
+				changed = true;
 			} else if (parse_split_type(*args, &typ)) {
-				set_type(trg.node, typ);
+				changed |= set_type(trg.node, typ);
 			} else {
 				fail(rsp, "");
 				break;
 			}
-			changed = true;
 		} else if (streq("-r", *args) || streq("--ratio", *args)) {
 			num--, args++;
 			if (num < 1) {
@@ -500,7 +500,7 @@ void cmd_node(char **args, int num, FILE *rsp)
 						rat = ((max * rat) + delta) / max;
 					}
 					if (rat > 0 && rat < 1) {
-						set_ratio(trg.node, rat);
+						changed |= set_ratio(trg.node, rat);
 					} else {
 						fail(rsp, "");
 						break;
@@ -512,13 +512,12 @@ void cmd_node(char **args, int num, FILE *rsp)
 			} else {
 				double rat;
 				if (sscanf(*args, "%lf", &rat) == 1 && rat > 0 && rat < 1) {
-					set_ratio(trg.node, rat);
+					changed |= set_ratio(trg.node, rat);
 				} else {
 					fail(rsp, "node %s: Invalid argument: '%s'.\n", *(args - 1), *args);
 					break;
 				}
 			}
-			changed = true;
 		} else if (streq("-F", *args) || streq("--flip", *args)) {
 			num--, args++;
 			if (num < 1) {
@@ -1174,12 +1173,27 @@ void cmd_rule(char **args, int num, FILE *rsp)
 				return;
 			}
 			rule_t *rule = make_rule();
-			char *class_name = strtok(*args, COL_TOK);
-			char *instance_name = strtok(NULL, COL_TOK);
-			char *name = strtok(NULL, COL_TOK);
+
+			struct tokenize_state state;
+			char *class_name = tokenize_with_escape(&state, args[0], COL_TOK[0]);
+			char *instance_name = tokenize_with_escape(&state, NULL, COL_TOK[0]);
+			char *name = tokenize_with_escape(&state, NULL, COL_TOK[0]);
+			if (!class_name || !instance_name || !name) {
+				free(class_name);
+				free(instance_name);
+				free(name);
+				return;
+			}
+
 			snprintf(rule->class_name, sizeof(rule->class_name), "%s", class_name);
-			snprintf(rule->instance_name, sizeof(rule->instance_name), "%s", instance_name==NULL?MATCH_ANY:instance_name);
-			snprintf(rule->name, sizeof(rule->name), "%s", name==NULL?MATCH_ANY:name);
+			snprintf(rule->instance_name, sizeof(rule->instance_name), "%s",
+					 instance_name[0] == '\0' ? MATCH_ANY : instance_name);
+			snprintf(rule->name, sizeof(rule->name), "%s",
+					 name[0] == '\0' ? MATCH_ANY : name);
+			free(class_name);
+			free(instance_name);
+			free(name);
+
 			num--, args++;
 			size_t i = 0;
 			while (num > 0) {
@@ -1495,6 +1509,47 @@ void set_setting(coordinates_t loc, char *name, char *value, FILE *rsp)
 		}
 		SET_DEF_DEFMON_DEFDESK_WIN(border_width, bw)
 #undef SET_DEF_DEFMON_DEFDESK_WIN
+#define SET_DEF_WIN(k, v) \
+		if (loc.node != NULL) { \
+			for (node_t *n = first_extrema(loc.node); n != NULL; n = next_leaf(n, loc.node)) { \
+				if (n->client != NULL) { \
+					n->client->k = v; \
+				} \
+			} \
+		} else if (loc.desktop != NULL) { \
+			for (node_t *n = first_extrema(loc.desktop->root); n != NULL; n = next_leaf(n, loc.desktop->root)) { \
+				if (n->client != NULL) { \
+					n->client->k = v; \
+				} \
+			} \
+		} else if (loc.monitor != NULL) { \
+			for (desktop_t *d = loc.monitor->desk_head; d != NULL; d = d->next) { \
+				for (node_t *n = first_extrema(d->root); n != NULL; n = next_leaf(n, d->root)) { \
+					if (n->client != NULL) { \
+						n->client->k = v; \
+					} \
+				} \
+			} \
+		} else { \
+			k = v; \
+			for (monitor_t *m = mon_head; m != NULL; m = m->next) { \
+				for (desktop_t *d = m->desk_head; d != NULL; d = d->next) { \
+					for (node_t *n = first_extrema(d->root); n != NULL; n = next_leaf(n, d->root)) { \
+						if (n->client != NULL) { \
+							n->client->k = v; \
+						} \
+					} \
+				} \
+			} \
+		}
+	} else if (streq("honor_size_hints", name)) {
+		honor_size_hints_mode_t hsh;
+		if (!parse_honor_size_hints_mode(value, &hsh)) {
+			fail(rsp, "config: %s: Invalid value: '%s'.\n", name, value);
+			return;
+		}
+		SET_DEF_WIN(honor_size_hints, hsh)
+#undef SET_DEF_WIN
 #define SET_DEF_DEFMON_DESK(k, v) \
 		if (loc.desktop != NULL) { \
 			loc.desktop->k = v; \
@@ -1739,7 +1794,6 @@ void set_setting(coordinates_t loc, char *name, char *value, FILE *rsp)
 		SET_BOOL(ignore_ewmh_focus)
 		SET_BOOL(ignore_ewmh_struts)
 		SET_BOOL(center_pseudo_tiled)
-		SET_BOOL(honor_size_hints)
 		SET_BOOL(removal_adjustment)
 #undef SET_BOOL
 #define SET_MON_BOOL(s) \
@@ -1830,6 +1884,8 @@ void get_setting(coordinates_t loc, char *name, FILE* rsp)
 		fprintf(rsp, "%s", CHILD_POL_STR(initial_polarity));
 	} else if (streq("automatic_scheme", name)) {
 		fprintf(rsp, "%s", AUTO_SCM_STR(automatic_scheme));
+	} else if (streq("honor_size_hints", name)) {
+		fprintf(rsp, "%s", HSH_MODE_STR(honor_size_hints));
 	} else if (streq("mapping_events_count", name)) {
 		fprintf(rsp, "%" PRIi8, mapping_events_count);
 	} else if (streq("directional_focus_tightness", name)) {
@@ -1870,7 +1926,6 @@ void get_setting(coordinates_t loc, char *name, FILE* rsp)
 	GET_BOOL(ignore_ewmh_focus)
 	GET_BOOL(ignore_ewmh_struts)
 	GET_BOOL(center_pseudo_tiled)
-	GET_BOOL(honor_size_hints)
 	GET_BOOL(removal_adjustment)
 	GET_BOOL(remove_disabled_monitors)
 	GET_BOOL(remove_unplugged_monitors)
